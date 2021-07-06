@@ -1,5 +1,0 @@
-name: ELK 6
-description: |
-  Elasticsearch, Logstash & Kibana
-version: 6.3.0-r2
-category: Logging & Monitoring

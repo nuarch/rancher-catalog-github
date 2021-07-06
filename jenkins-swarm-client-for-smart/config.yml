@@ -1,5 +1,0 @@
-name: Jenkins Swarm Client for SMART
-description: |
-  Swarm client to create dynamic build executors for the SMART projects (docker, java, node)
-version: "v0.2.0-r1"
-category: Continuous Integration

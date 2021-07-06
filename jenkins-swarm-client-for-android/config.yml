@@ -1,5 +1,0 @@
-name: Jenkins Swarm Client for Android
-description: |
-  Swarm client to create dynamic build executors for the Android projects
-version: "v0.1.0-r1"
-category: Continuous Integration

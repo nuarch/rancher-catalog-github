@@ -9,8 +9,7 @@ jenkins-master:
     - "${jenkinsPort}:8080"
   volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-  volumes_from:
-    - jenkins-datavolume
+    - ${volumeWork}:/var/jenkins_home
   labels:
     io.rancher.container.dns: 'true'
     io.rancher.container.hostname_override: container_name
@@ -19,19 +18,7 @@ jenkins-master:
     {{- if eq .Values.useHostAffinity "true" }}
     io.rancher.scheduler.affinity:host_label: ${hostAffinityLabel}
     {{- end }}
-    io.rancher.sidekicks: jenkins-datavolume
   environment:
     TZ: "America/New_York"
     JENKINS_OPTS: "--prefix=/${pathPrefix}"
   user: jenkins:${dockerGroupId}
-
-jenkins-datavolume:
-  image: "busybox"
-  volumes:
-    - ${volumeWork}:/var/jenkins_home:rw
-  labels:
-    io.rancher.container.start_once: true
-    {{- if eq .Values.useHostAffinity "true" }}
-    io.rancher.scheduler.affinity:host_label: ${hostAffinityLabel}
-    {{- end }}
-  entrypoint: ["chown", "-R", "1000:1000", "/var/jenkins_home"]

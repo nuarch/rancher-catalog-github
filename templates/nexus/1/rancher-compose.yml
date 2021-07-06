@@ -1,6 +1,6 @@
 .catalog:
   name: Nexus
-  version: 3.17.0r1
+  version: 3.25.1r1
   description: |
     Template for deploying the Nexus Repository Manager.
   questions:

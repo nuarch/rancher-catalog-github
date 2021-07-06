@@ -1,5 +1,0 @@
-name: Jenkins
-description: |
-  Jenkins CI server (LTS)
-version: lts-slim-latest
-category: Continuous Integration

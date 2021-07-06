@@ -1,0 +1,47 @@
+.catalog:
+  name: Nexus
+  version: 3.31.1r1
+  description: |
+    Template for deploying the Nexus Repository Manager.
+  questions:
+
+# Registry
+
+  - variable: "forceImagePull"
+    label: "Force image pull"
+    description: "Ignore cache and pull image from repository."
+    type: "boolean"
+    required: true
+    default: false
+
+# Hosts
+
+  - variable: "useHostAffinity"
+    label: "Use host affinity"
+    description: "Schedule instance to a host with specified label"
+    type: "boolean"
+    required: true
+    default: true
+
+  - variable: "hostAffinityLabel"
+    label: "Host label"
+    description: "Only used when using host affinity.  Example label: type=persist"
+    type: "string"
+    required: false
+    default: repository=true
+
+# Nexus Options
+
+  - variable: "mountPoint"
+    label: "Host Mount Point"
+    description: "Host mount point for Nexus data directory.  It must be writable by user with UID 200."
+    type: "string"
+    required: true
+    default: /mnt/disks/repository-data-1/nexus
+
+  - variable: "baseUrl"
+    label: "Application Base URL "
+    description: "Base URL used for serving up content as application is expected to be deployed behind lb/proxy. Do not preceed with '/'"
+    type: "string"
+    required: true
+    default: nexus
