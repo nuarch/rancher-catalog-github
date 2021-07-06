@@ -37,7 +37,7 @@
     description: "Host mount point for Nexus data directory.  It must be writable by user with UID 200."
     type: "string"
     required: true
-    default: /mnt/disks/repository-data-1/nexus
+    default: /mnt/disks/repo-nexus/nexus
 
   - variable: "baseUrl"
     label: "Application Base URL "
