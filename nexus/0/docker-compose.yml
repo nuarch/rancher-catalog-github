@@ -1,0 +1,24 @@
+version: '2'
+services:
+
+  nexus:
+    image: sonatype/nexus3:3.17.0
+    ports:
+    - 8081:8081
+    - 5000:5000
+    - 5001:5001        
+    volumes:
+    - ${mountPoint}:/nexus-data
+    labels:
+      io.rancher.container.dns: true
+      io.rancher.container.hostname_override: container_name
+      io.rancher.container.pull_image: ${forceImagePull}
+      io.rancher.scheduler.affinity:container_label_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      {{- if eq .Values.useHostAffinity "true" }}
+      io.rancher.scheduler.affinity:host_label: ${hostAffinityLabel}
+      {{- end }}
+    mem_limit: 4096000000
+    environment:
+      TZ: "America/New_York"
+      INSTALL4J_ADD_VM_PARAMS: "-XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:MaxRAMFraction=1 -Xms1200m -Xmx1200m -XX:MaxDirectMemorySize=2g -Djava.util.prefs.userRoot=/nexus-data/javaprefs"
+      NEXUS_CONTEXT: ${baseUrl}

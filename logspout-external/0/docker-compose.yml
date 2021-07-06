@@ -1,0 +1,26 @@
+version: '2'
+services:
+
+   logspout:
+     restart: always
+     environment:
+       ROUTE_URIS: "logstash://logstash:5000"
+       LOGSPOUT: 'ignore'
+       DEBUG: true
+       INACTIVITY_TIMEOUT: ${INACTIVITY_TIMEOUT}
+     volumes:
+     - '/var/run/docker.sock:/var/run/docker.sock'
+     links:
+     - logstash-collector:logstash
+     labels:
+       io.rancher.container.hostname_override: container_name
+       io.rancher.scheduler.affinity:host_label_ne: type=monitor,type=logstash,type=elasticsearch,type=kibana
+       io.rancher.scheduler.global: 'true'
+       io.rancher.container.pull_image: always
+     tty: true
+     image: docker.nuarch.io/dsny/logspout-rancher:docker12
+     stdin_open: true
+
+#     - ${logstash_collector_ip}
+   logstash-collector:
+     image: rancher/external-service

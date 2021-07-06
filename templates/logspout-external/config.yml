@@ -1,0 +1,6 @@
+name: Logspout Rancher External
+description: |
+  Customized Logspout stack for Rancher that sends logs to an external (outside of
+  current Rancher Environment) Logstash Collector.
+version: 1.0.0
+category: Monitoring

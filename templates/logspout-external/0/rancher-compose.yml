@@ -1,0 +1,29 @@
+.catalog:
+  name: Logspout Rancher External
+  version: 1.0.0
+  description: |
+    Logspout Rancher External is a log router for Docker containers that has been
+    customized for Rancher and points to an external (outside of current Rancher
+    Environment) Logstash Collector
+  questions:
+
+    - variable: "logstash_collector_ip"
+      label: "Logstash Collector IP"
+      description: "IP of external Logstash Collector. Note 10.155.188.147 is the production LB IP for logstash"
+      type: "string"
+      require: true
+      default: "10.155.188.147"
+
+    - variable: "INACTIVITY_TIMEOUT"
+      label: "INACTIVITY_TIMEOUT"
+      description: "INACTIVITY_TIMEOUT"
+      type: "string"
+      require: true
+      default: "1m"
+
+logspout:
+   start_on_create: true
+logstash-collector:
+   external_ips:
+   - ${logstash_collector_ip}
+   start_on_create: true

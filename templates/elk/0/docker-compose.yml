@@ -1,0 +1,681 @@
+version: '2'
+services:
+
+{{- if eq .Values.updateSystCtl "true" }}
+  es-sysctl:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    image: rawmind/alpine-sysctl:0.1
+    privileged: true
+    environment:
+      - "SYSCTL_KEY=vm.max_map_count"
+      - "SYSCTL_VALUE=262144"
+{{- end}}
+
+{{- if eq .Values.useCluster "false" }}
+  es:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      # {{- if gt (len .Values.useCluster) 0 }}
+      # io.rancher.scheduler.affinity:host_label: ${esHostScheduleLabel}
+      # {{- end}}
+      io.rancher.sidekicks: es-storage{{- if eq .Values.updateSystCtl "true" -}},es-sysctl{{- end}}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/elasticsearch/elasticsearch:6.3.0
+    {{- else }}
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.3.0
+    {{- end }}
+    environment:
+      - "bootstrap.memory_lock=true"
+      - "cluster.name=${cluster_name}"
+      - "discovery.type=single-node"
+      - "node.name=$${HOSTNAME}"
+      - "xpack.monitoring.collection.enabled=true"
+      {{- if eq .Values.licensedDeployment "false" }}
+      - "xpack.security.enabled=false"
+      {{- else }}
+      - "xpack.security.enabled=true"
+      - "xpack.security.audit.enabled=true"
+      - "ELASTIC_PASSWORD=${elasticPassword}"
+      {{- end }}
+      - "ES_JAVA_OPTS=-Xms${single_heap_size} -Xmx${single_heap_size}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: ${single_mem_limit}
+    mem_swappiness: 0
+    cap_add:
+      - IPC_LOCK
+    volumes_from:
+      - es-storage
+
+  es-storage:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    image: rawmind/alpine-volume:0.0.2-1
+    environment:
+      SERVICE_UID: 1000
+      SERVICE_GID: 1000
+      SERVICE_VOLUME: "/usr/share/elasticsearch/data"
+    volumes:
+      - es-volume:/usr/share/elasticsearch/data
+
+  kibana-lb:
+    ports:
+    - "${kibanaPublicPort}:5601"
+    restart: always
+    tty: true
+    image: rancher/load-balancer-service
+    links:
+      - kibana:kibana
+    stdin_open: true
+
+  kibana:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      {{- if and (eq .Values.licensedDeployment "true") (eq .Values.setPasswords "true") }}
+      io.rancher.sidekicks: xpack-configs
+      {{- end }}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/kibana/kibana:6.3.0
+    {{- else }}
+    image: docker.elastic.co/kibana/kibana:6.3.0
+    {{- end }}
+    environment:
+      - "ELASTICSEARCH_URL=http://elasticsearch:9200"
+      {{- if eq .Values.licensedDeployment "true" }}
+      - "ELASTICSEARCH_USERNAME=kibana"
+      - "ELASTICSEARCH_PASSWORD=${kibanaPassword}"
+      - "XPACK_SECURITY_ENCRYPTIONKEY=eCoHK5w7xxYyojhEXHeGUNFttWZwAPNA"
+      {{- end }}
+      - "XPACK_MONITORING_ENABLED=true"
+      - "XPACK_REPORTING_ENCRYPTIONKEY=eCoHK5w7xxYyojhEXHeGUNFttWZwAPNA"
+      - "XPACK_XPACK_MAIN_TELEMETRY_ENABLED=false"
+    links:
+      - es:elasticsearch
+    restart: always
+    tty: true
+    stdin_open: true
+
+  {{- if and (eq .Values.licensedDeployment "true") (eq .Values.setPasswords "true") }}
+  xpack-configs:
+    labels:
+      io.rancher.container.start_once: true
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/dsny/elk-x-pack:6.3.0
+    {{- else }}
+    image: dsny/elk-x-pack:6.3.0
+    {{- end }}
+    environment:
+      - "ELASTIC_PASSWORD=${elasticPassword}"
+      - "KIBANA_PASSWORD=${kibanaPassword}"
+      - "LOGSTASH_SYSTEM_PASSWORD=${logstashSystemPassword}"
+      - "LOGSTASH_INTERNAL_PASSWORD=${logstashInternalPassword}"
+      - "LOGSTASH_USER_PASSWORD=${logstashUserPassword}"
+    links:
+      - es:elasticsearch
+    depends_on:
+      - es
+    stdin_open: true
+    tty: true
+  {{- end }}
+
+  logstash:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.sidekicks: logstash-config
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/logstash/logstash:6.3.0
+    {{- else }}
+    image: docker.elastic.co/logstash/logstash:6.3.0
+    {{- end }}
+    {{- if eq .Values.licensedDeployment "true" }}
+    environment:
+      - "XPACK_MONITORING_ENABLED=true"
+      - "XPACK_MONITORING_ELASTICSEARCH_USERNAME=logstash_system"
+      - "XPACK_MONITORING_ELASTICSEARCH_PASSWORD=${logstashSystemPassword}"
+      - "XPACK_MONITORING_ELASTICSEARCH_URL=http://elasticsearch:9200"
+    {{- end }}
+    metadata:
+      logstash:
+        inputs: |
+          ${collector_inputs}
+        filters: |
+          ${indexer_filters}
+        {{- if eq .Values.licensedDeployment "true" }}
+        outputs: |
+          elasticsearch {
+            hosts => ["elasticsearch.rancher.internal:9200"]
+            user => logstash_internal
+            password => ${logstashInternalPassword}
+            index => "logstash-%{+YYYY.MM.dd}"
+          }
+        {{- else }}
+        outputs: |
+          elasticsearch {
+            hosts => ["elasticsearch.rancher.internal:9200"]
+            index => "logstash-%{+YYYY.MM.dd}"
+          }
+        {{- end }}
+    command:
+      - logstash
+      - -f
+      - /etc/logstash
+    links:
+      - es:elasticsearch
+    volumes_from:
+      - logstash-config
+    restart: always
+    tty: true
+    stdin_open: true
+
+  logstash-config:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/rancher/logstash-config:v0.2.0
+    {{- else }}
+    image: rancher/logstash-config:v0.2.0
+    {{- end }}
+    restart: always
+
+{{- else }}
+  es-master:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      io.rancher.scheduler.affinity:host_label: "elk=data"
+      io.rancher.sidekicks: es-master-storage,es-master-certs{{- if eq .Values.updateSystCtl "true" -}},es-sysctl{{- end}}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/elasticsearch/elasticsearch:6.3.0
+    {{- else }}
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.3.0
+    {{- end }}
+    environment:
+      - "bootstrap.memory_lock=true"
+      - "cluster.name=${cluster_name}"
+      - "discovery.zen.ping.unicast.hosts=es-master"
+      - "discovery.zen.minimum_master_nodes=${minimum_master_nodes}"
+      - "node.name=$${HOSTNAME}"
+      - "node.data=false"
+      - "node.ingest=false"
+      - "node.master=true"
+      - "xpack.monitoring.collection.enabled=true"
+      {{- if eq .Values.licensedDeployment "false" }}
+      - "xpack.security.enabled=false"
+      {{- else }}
+      - "xpack.security.enabled=true"
+      - "xpack.security.audit.enabled=true"
+      - "xpack.security.transport.ssl.enabled=true"
+      - "xpack.security.transport.ssl.verification_mode=certificate"
+      - "xpack.security.transport.ssl.key=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.key"
+      - "xpack.security.transport.ssl.certificate=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.crt"
+      - "xpack.security.transport.ssl.certificate_authorities=/usr/share/elasticsearch/config/x-pack/certificates/certs/ca.crt"
+      - "ELASTIC_PASSWORD=${elasticPassword}"
+      {{- end }}
+      - "ES_JAVA_OPTS=-Xms${master_heap_size} -Xmx${master_heap_size}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: ${master_mem_limit}
+    mem_swappiness: 0
+    cap_add:
+      - IPC_LOCK
+    volumes_from:
+      - es-master-storage
+      - es-master-certs
+    scale: 3
+
+  es-master-storage:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    image: rawmind/alpine-volume:0.0.2-1
+    environment:
+      SERVICE_UID: 1000
+      SERVICE_GID: 1000
+      SERVICE_VOLUME: "/usr/share/elasticsearch/data"
+    volumes:
+      - es-master-volume:/usr/share/elasticsearch/data
+
+  es-master-certs:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/dsny/elk-certs:v1.0.0
+    {{- else }}
+    image: dsny/elk-certs:v1.0.0
+    {{- end }}
+
+  es-data:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      io.rancher.scheduler.affinity:host_label: "elk=data"
+      io.rancher.sidekicks: es-data-storage,es-data-certs{{- if eq .Values.updateSystCtl "true" -}},es-sysctl{{- end}}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/elasticsearch/elasticsearch:6.3.0
+    {{- else }}
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.3.0
+    {{- end }}
+    environment:
+      - "bootstrap.memory_lock=true"
+      - "cluster.name=${cluster_name}"
+      - "discovery.zen.ping.unicast.hosts=es-master"
+      - "node.name=$${HOSTNAME}"
+      - "node.data=true"
+      - "node.ingest=false"
+      - "node.master=false"
+      - "xpack.monitoring.collection.enabled=true"
+      {{- if eq .Values.licensedDeployment "false" }}
+      - "xpack.security.enabled=false"
+      {{- else }}
+      - "xpack.security.enabled=true"
+      - "xpack.security.audit.enabled=true"
+      - "xpack.security.transport.ssl.enabled=true"
+      - "xpack.security.transport.ssl.verification_mode=certificate"
+      - "xpack.security.transport.ssl.key=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.key"
+      - "xpack.security.transport.ssl.certificate=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.crt"
+      - "xpack.security.transport.ssl.certificate_authorities=/usr/share/elasticsearch/config/x-pack/certificates/certs/ca.crt"
+      - "ELASTIC_PASSWORD=${elasticPassword}"
+      {{- end }}
+      - "ES_JAVA_OPTS=-Xms${data_heap_size} -Xmx${data_heap_size}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: ${data_mem_limit}
+    mem_swappiness: 0
+    cap_add:
+      - IPC_LOCK
+    volumes_from:
+      - es-data-storage
+      - es-data-certs
+    depends_on:
+      - es-master
+    scale: 3
+
+  es-data-storage:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    image: rawmind/alpine-volume:0.0.2-1
+    environment:
+      SERVICE_UID: 1000
+      SERVICE_GID: 1000
+      SERVICE_VOLUME: "/usr/share/elasticsearch/data"
+    volumes:
+      - es-data-volume:/usr/share/elasticsearch/data
+
+  es-data-certs:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/dsny/elk-certs:v1.0.0
+    {{- else }}
+    image: dsny/elk-certs:v1.0.0
+    {{- end }}
+
+  es-client-kibana:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      io.rancher.scheduler.affinity:host_label: "elk=other"
+      io.rancher.sidekicks: es-client-kibana-storage,es-client-kibana-certs{{- if eq .Values.updateSystCtl "true" -}},es-sysctl{{- end}}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/elasticsearch/elasticsearch:6.3.0
+    {{- else }}
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.3.0
+    {{- end }}
+    environment:
+      - "bootstrap.memory_lock=true"
+      - "cluster.name=${cluster_name}"
+      - "discovery.zen.ping.unicast.hosts=es-master"
+      - "node.name=$${HOSTNAME}"
+      - "node.data=false"
+      - "node.master=false"
+      - "xpack.monitoring.collection.enabled=true"
+      {{- if eq .Values.licensedDeployment "false" }}
+      - "xpack.security.enabled=false"
+      {{- else }}
+      - "xpack.security.enabled=true"
+      - "xpack.security.audit.enabled=true"
+      - "xpack.security.transport.ssl.enabled=true"
+      - "xpack.security.transport.ssl.verification_mode=certificate"
+      - "xpack.security.transport.ssl.key=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.key"
+      - "xpack.security.transport.ssl.certificate=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.crt"
+      - "xpack.security.transport.ssl.certificate_authorities=/usr/share/elasticsearch/config/x-pack/certificates/certs/ca.crt"
+      - "ELASTIC_PASSWORD=${elasticPassword}"
+      {{- end }}
+      - "ELASTIC_PASSWORD=elk-r0cks*"
+      - "ES_JAVA_OPTS=-Xms${client_heap_size} -Xmx${client_heap_size}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: ${data_mem_limit}
+    mem_swappiness: 0
+    cap_add:
+      - IPC_LOCK
+    volumes_from:
+      - es-client-kibana-storage
+      - es-client-kibana-certs
+    depends_on:
+      - es-master
+    scale: 2
+
+  es-client-kibana-storage:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    image: rawmind/alpine-volume:0.0.2-1
+    environment:
+      SERVICE_UID: 1000
+      SERVICE_GID: 1000
+      SERVICE_VOLUME: "/usr/share/elasticsearch/data"
+    volumes:
+      - es-client-volume:/usr/share/elasticsearch/data
+
+  es-client-kibana-certs:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/dsny/elk-certs:v1.0.0
+    {{- else }}
+    image: dsny/elk-certs:v1.0.0
+    {{- end }}
+
+  es-client-logstash:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      io.rancher.scheduler.affinity:host_label: "elk=other"
+      io.rancher.sidekicks: es-client-logstash-storage,es-client-logstash-certs{{- if eq .Values.updateSystCtl "true" -}},es-sysctl{{- end}}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/elasticsearch/elasticsearch:6.3.0
+    {{- else }}
+    image: docker.elastic.co/elasticsearch/elasticsearch:6.3.0
+    {{- end }}
+    environment:
+      - "bootstrap.memory_lock=true"
+      - "cluster.name=${cluster_name}"
+      - "discovery.zen.ping.unicast.hosts=es-master"
+      - "node.name=$${HOSTNAME}"
+      - "node.data=false"
+      - "node.master=false"
+      - "xpack.monitoring.collection.enabled=true"
+      {{- if eq .Values.licensedDeployment "false" }}
+      - "xpack.security.enabled=false"
+      {{- else }}
+      - "xpack.security.enabled=true"
+      - "xpack.security.audit.enabled=true"
+      - "xpack.security.transport.ssl.enabled=true"
+      - "xpack.security.transport.ssl.verification_mode=certificate"
+      - "xpack.security.transport.ssl.key=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.key"
+      - "xpack.security.transport.ssl.certificate=/usr/share/elasticsearch/config/x-pack/certificates/certs/instance.crt"
+      - "xpack.security.transport.ssl.certificate_authorities=/usr/share/elasticsearch/config/x-pack/certificates/certs/ca.crt"
+      - "ELASTIC_PASSWORD=${elasticPassword}"
+      {{- end }}
+      - "ELASTIC_PASSWORD=elk-r0cks*"
+      - "ES_JAVA_OPTS=-Xms${client_heap_size} -Xmx${client_heap_size}"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    mem_limit: ${data_mem_limit}
+    mem_swappiness: 0
+    cap_add:
+      - IPC_LOCK
+    volumes_from:
+      - es-client-logstash-storage
+      - es-client-logstash-certs
+    depends_on:
+      - es-master
+    scale: 2
+
+  es-client-logstash-storage:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    image: rawmind/alpine-volume:0.0.2-1
+    environment:
+      SERVICE_UID: 1000
+      SERVICE_GID: 1000
+      SERVICE_VOLUME: "/usr/share/elasticsearch/data"
+    volumes:
+      - es-client-volume:/usr/share/elasticsearch/data
+
+  es-client-logstash-certs:
+    labels:
+      io.rancher.container.start_once: true
+    network_mode: none
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/dsny/elk-certs:v1.0.0
+    {{- else }}
+    image: dsny/elk-certs:v1.0.0
+    {{- end }}
+
+  {{- if and (eq .Values.licensedDeployment "true") (eq .Values.setPasswords "true") }}
+  xpack-configs:
+    labels:
+      io.rancher.container.start_once: true
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/dsny/elk-x-pack:6.3.0
+    {{- else }}
+    image: dsny/elk-x-pack:6.3.0
+    {{- end }}
+    environment:
+      - "ELASTIC_PASSWORD=${elasticPassword}"
+      - "KIBANA_PASSWORD=${kibanaPassword}"
+      - "LOGSTASH_SYSTEM_PASSWORD=${logstashSystemPassword}"
+      - "LOGSTASH_INTERNAL_PASSWORD=${logstashInternalPassword}"
+      - "LOGSTASH_USER_PASSWORD=${logstashUserPassword}"
+    links:
+      - es-master:elasticsearch
+    depends_on:
+      - es-master
+    stdin_open: true
+    tty: true
+    scale: 1
+  {{- end }}
+
+  kibana-lb:
+    ports:
+    - "${kibanaPublicPort}:5601"
+    restart: always
+    tty: true
+    image: rancher/load-balancer-service
+    links:
+      - kibana:kibana
+    labels:
+      io.rancher.scheduler.affinity:host_label: "elk=public-lb"
+    stdin_open: true
+
+  kibana:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      io.rancher.scheduler.affinity:host_label: "elk=other"
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/kibana/kibana:6.3.0
+    {{- else }}
+    image: docker.elastic.co/kibana/kibana:6.3.0
+    {{- end }}
+    environment:
+      - "ELASTICSEARCH_URL=http://elasticsearch:9200"
+      {{- if eq .Values.licensedDeployment "true" }}
+      - "ELASTICSEARCH_USERNAME=kibana"
+      - "ELASTICSEARCH_PASSWORD=${kibanaPassword}"
+      - "XPACK_SECURITY_ENCRYPTIONKEY=eCoHK5w7xxYyojhEXHeGUNFttWZwAPNA"
+      {{- end }}
+      - "XPACK_MONITORING_ENABLED=true"
+      - "XPACK_REPORTING_ENCRYPTIONKEY=eCoHK5w7xxYyojhEXHeGUNFttWZwAPNA"
+      - "XPACK_XPACK_MAIN_TELEMETRY_ENABLED=false"
+    links:
+      - es-client-kibana:elasticsearch
+    restart: always
+    tty: true
+    stdin_open: true
+    scale: 2
+
+  logstash:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+      io.rancher.scheduler.affinity:container_label_soft_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
+      io.rancher.scheduler.affinity:host_label: "elk=other"
+      io.rancher.sidekicks: logstash-config
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/logstash/logstash:6.3.0
+    {{- else }}
+    image: docker.elastic.co/logstash/logstash:6.3.0
+    {{- end }}
+    {{- if eq .Values.licensedDeployment "true" }}
+    environment:
+      - "XPACK_MONITORING_ENABLED=true"
+      - "XPACK_MONITORING_ELASTICSEARCH_USERNAME=logstash_system"
+      - "XPACK_MONITORING_ELASTICSEARCH_PASSWORD=${logstashSystemPassword}"
+      - "XPACK_MONITORING_ELASTICSEARCH_URL=http://elasticsearch:9200"
+    {{- end }}
+    metadata:
+      logstash:
+        inputs: |
+          ${collector_inputs}
+        filters: |
+          ${indexer_filters}
+        {{- if eq .Values.licensedDeployment "true" }}
+        outputs: |
+          elasticsearch {
+            hosts => ["elasticsearch.rancher.internal:9200"]
+            user => logstash_internal
+            password => ${logstashInternalPassword}
+            index => "logstash-%{+YYYY.MM.dd}"
+          }
+        {{- else }}
+        outputs: |
+          elasticsearch {
+            hosts => ["elasticsearch.rancher.internal:9200"]
+            index => "logstash-%{+YYYY.MM.dd}"
+          }
+        {{- end }}
+    command:
+      - logstash
+      - -f
+      - /etc/logstash
+    links:
+      - es-client-logstash:elasticsearch
+    volumes_from:
+      - logstash-config
+    restart: always
+    tty: true
+    stdin_open: true
+    scale: 2
+
+  logstash-config:
+    labels:
+      io.rancher.container.hostname_override: container_name
+      {{- if eq .Values.forceImagePull "true" }}
+      io.rancher.container.pull_image: "always"
+      {{- else }}
+      io.rancher.container.pull_image: "none"
+      {{- end }}
+    {{- if eq .Values.usePrivateRegistry "true" }}
+    image: ${privateRegistry}/rancher/logstash-config:v0.2.0
+    {{- else }}
+    image: rancher/logstash-config:v0.2.0
+    {{- end }}
+    restart: always
+
+{{- end }}
+
+volumes:
+
+{{- if eq .Values.useCluster "false" }}
+  es-volume:
+    driver: ${volume_driver}
+    per_container: true
+
+{{- else }}
+
+  es-master-volume:
+    driver: ${volume_driver}
+    per_container: true
+  es-data-volume:
+    driver: ${volume_driver}
+    per_container: true
+  es-client-volume:
+    driver: ${volume_driver}
+    per_container: true
+{{- end }}

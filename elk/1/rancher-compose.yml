@@ -1,0 +1,220 @@
+version: '2'
+catalog:
+  name: ELK 6
+  version: 6.3.0-r2
+  description: Elasticsearch deployed as a single node or scalable cluster
+
+  questions:
+    - variable: usePrivateRegistry
+      label: "Use private registry"
+      type: "boolean"
+      required: true
+      default: true
+
+    - variable: "privateRegistry"
+      label: "Private registry"
+      description: "FQDN and port of private registry.  If private registry used, trailing '/' is required;  otherwise, delete entry"
+      type: "string"
+      required: true
+      default: "msplva-dsnsmt71.csc.nycnet:5000"
+
+    - variable: "forceImagePull"
+      label: "Force image pull"
+      description: "Ignore cache and pull image from repository."
+      type: "boolean"
+      required: true
+      default: false
+
+    - variable: "updateSystCtl"
+      label: "Update host sysctl:"
+      description: |
+        Set true to avoid vm.max_map_count errors.
+        WARN: If set true, host param vm.max_map_count will be update to 262144.
+      type: "boolean"
+      default: false
+      required: true
+
+    - variable: "licensedDeployment"
+      label: "Licensed Deployment"
+      description: "Deploy ELK as licensed version with X-Pack features and basic authentication."
+      type: "boolean"
+      required: true
+      default: true
+
+    - variable: "setPasswords"
+      label: "Apply license and Set Passwords"
+      description: |
+        Apply license and set passwords for elastic, kibana and logstash_system users.  Not used for non-licensed deployment.  *** See notes above.
+      type: "boolean"
+      required: true
+      default: true
+
+    - variable: "elasticPassword"
+      type: "password"
+      label: "Elastic Password"
+      description: "Password for 'elastic' user.  *** See notes above."
+      default: "elastic"
+
+    - variable: "kibanaPassword"
+      type: "password"
+      label: "Kibana Password"
+      description: "Password for 'kibana' user.  *** See notes above."
+      default: "kibana"
+
+    - variable: "logstashSystemPassword"
+      type: "password"
+      label: "Logstash System Password"
+      description: "Password for 'logstash_system' user.  *** See notes above."
+      default: "logstash_system"
+
+    - variable: "logstashInternalPassword"
+      type: "password"
+      label: "Logstash Internal Password"
+      description: "Password for 'logstash_internal' user.  *** See notes above."
+      default: "logstash_internal"
+
+    - variable: "logstashUserPassword"
+      type: "password"
+      label: "Logstash User Password"
+      description: "Password for 'logstash_user' user.  *** See notes above."
+      default: "logstash_user"
+
+    - variable: "kibanaPublicPort"
+      label: "Kibana Public Port"
+      description: "Unique public port for Kibana"
+      type: "int"
+      default: 8081
+      required: true
+
+    - variable: "logstashPublicPort"
+      label: "Logstash Public Port"
+      description: "Unique public port for Logstash (i.e. port were logs shipped too)"
+      type: "int"
+      default: 5000
+      required: true
+
+    - variable: "useCluster"
+      label: "Enable Cluster"
+      description: "Deploy Elasticsearch as cluster."
+      type: "boolean"
+      required: true
+      default: true
+
+    - variable: "cluster_name"
+      type: "string"
+      label: "Cluster name"
+      description: "Name of the Elasticsearch Cluster"
+      default: "es-cluster"
+
+    - variable: "minimum_master_nodes"
+      type: "int"
+      required: true
+      label: "# of minimum ES Master Nodes"
+      description: "Set the number of required nodes to reach quorum in a cluster. Sets initial scale to this value as well"
+      default: 3
+
+    - variable: "master_heap_size"
+      type: "string"
+      required: true
+      label: "Heap size (master nodes)"
+      description: "Heap size to be allocated for Java (master nodes)"
+      default: "512m"
+
+    - variable: "master_mem_limit"
+      type: "int"
+      required: true
+      label: "Memory limit in byte (master nodes)"
+      description: "Memory limit in Byte per elasticsearch container. AT LEAST double the heap size! (master nodes)"
+      default: 1073741824
+
+    - variable: "initial_data_nodes"
+      type: "int"
+      required: true
+      label: "# of initial ES Data Nodes"
+      description: "Set the initial number of data nodes"
+      default: 2
+
+    - variable: "data_heap_size"
+      type: "string"
+      required: true
+      label: "Heap size (data nodes)"
+      description: "Heap size to be allocated for Java (data nodes)"
+      default: "2048m"
+
+    - variable: "data_mem_limit"
+      type: "int"
+      required: true
+      label: "Memory limit in byte (data nodes)"
+      description: "Memory limit in Byte per elasticsearch container. AT LEAST double the heap size! (data nodes)"
+      default: 4294967296
+
+    - variable: "initial_client_nodes"
+      type: "int"
+      required: true
+      label: "# of initial ES Client Nodes"
+      description: "Set the initial number of client nodes"
+      default: 2
+
+    - variable: "client_heap_size"
+      type: "string"
+      required: true
+      label: "Heap size (client nodes)"
+      description: "Heap size to be allocated for Java (client nodes)"
+      default: "2048m"
+
+    - variable: "client_mem_limit"
+      type: "int"
+      required: true
+      label: "Memory limit in byte (client nodes)"
+      description: "Memory limit in Byte per elasticsearch container. AT LEAST double the heap size! (client nodes)"
+      default: 4294967296
+
+    - variable: "single_heap_size"
+      type: "string"
+      required: true
+      label: "Heap size (single node)"
+      description: "Heap size to be allocated for Java (single node)"
+      default: "2048m"
+
+    - variable: "single_mem_limit"
+      type: "int"
+      required: true
+      label: "Memory limit in byte (single node)"
+      description: "Memory limit in Byte per elasticsearch container. AT LEAST double the heap size! (single node)"
+      default: 4294967296
+
+    - variable: "collector_inputs"
+      description: |
+        Logstash collection tier inputs. These will be added
+        directly to input { } section of logstash.conf
+      label: "Logstash inputs"
+      type: "multiline"
+      required: true
+      default: |
+        udp {
+          port => 5044
+          codec => "json"
+          buffer_size => "1048576"
+        }
+
+    - variable: "indexer_filters"
+      description: |
+        Logstash indexing tier filters. These will be added
+        directly to filter { } section of logstash.conf
+      label: "Logstash filters"
+      type: "multiline"
+      required: false
+      default: |
+        json {
+          source => "message"
+        }
+
+    - variable: "volume_driver"
+      description: "The VOLUME driver to associate with this server"
+      label: "VOLUME Driver"
+      required: true
+      default: "local"
+      type: enum
+      options:
+        - local
+        - rancher-nfs

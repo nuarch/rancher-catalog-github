@@ -1,0 +1,94 @@
+.catalog:
+  name: Jenkins Swarm Client for Android
+  version: "v0.1.0-r1"
+  description: |
+    Build agents that auto-connect to Jenkins Master and are configured for Android.
+  questions:
+
+# Registry
+
+  - variable: "registry"
+    label: "Registry"
+    description: "DSNY, nuArch, or custom registry"
+    type: enum
+    options:
+      - nuarch
+      - other
+    required: true
+    default: nuarch
+
+  - variable: "registryPath"
+    label: "Registry path (upto, but not including image name and version)"
+    description: "Used only when 'other' selected for regsitry.  Examples: msplva-dsnsmt71.csc.nycnet:5000/dsny for DSNY or gcr.io/dnsy-eis"
+    type: string
+    required: false
+    default: ""
+
+  - variable: "forceImagePull"
+    label: "Force image pull"
+    description: "Ignore cache and pull image from repository."
+    type: "boolean"
+    required: true
+    default: false
+
+# Hosts
+
+  - variable: "scale"
+    label: "Scale"
+    description: "Number of containers to run"
+    type: "int"
+    required: true
+    default: 1
+
+  - variable: "useHostAffinity"
+    label: "Use host affinity"
+    description: "Schedule instance to a host with specified label"
+    type: "boolean"
+    required: true
+    default: true
+
+  - variable: "hostAffinityLabel"
+    label: "Host label for Affinity"
+    description: "Only used when using host affinity.  Example label: type=persist"
+    type: "string"
+    required: false
+    default: ci-agent=true
+
+# Links
+
+  - variable: jenkinsMaster
+    label: "Jenkins Master"
+    type: "service"
+    required: true
+    description: |
+      Service that is running Jenkins Master CI server
+
+# Deployment settings
+
+  - variable: "pathPrefix"
+    type: "string"
+    label: "Jenkins Path Prefix"
+    description: "Path prefix for accessing Jenkins Master"
+    default: "jenkins"
+    required: true
+
+  - variable: jenkinsUser
+    label: "Jenkins Username"
+    type: "string"
+    required: false
+    description: |
+      Username to authenticate to a secured Jenkins host with.
+
+  - variable: jenkinsPass
+    label: "Jenkins Password"
+    type: "password"
+    required: false
+    description: |
+      Password to authenticate to a secured Jenkins host with.
+
+  - variable: "executors"
+    label: "Build Executors"
+    description: "Number of build executors (i.e. processes)"
+    type: "int"
+    required: true
+    default: 2
